@@ -1,18 +1,19 @@
 #include "raylib.hpp"
 
+#include <cmath>
+
 enum GameScreen {PAUSE, GAMEPLAY};
 
 struct Actor {
-    int posX;
-    int posY;
+    float posX;
+    float posY;
 
-    float dirX;
-    float dirY;
+    float steerAngle;
 
     float vel;
 
-    int height;
-    int width;
+    float height;
+    float width;
 };
 
 int main()
@@ -24,11 +25,11 @@ int main()
 
     rl::InitWindow(screenWidth, screenHeight, "Tanky");
 
-    GameScreen currentScreen = PAUSE;
+    GameScreen currentScreen = GAMEPLAY;
 
     rl::SetTargetFPS(60);
 
-    Actor player{.posX=screenWidth/2, .posY=screenHeight/2, .dirX=1, .dirY=0, .vel=0, .height=30, .width=50};
+    Actor player{.posX=screenWidth/2, .posY=screenHeight/2, .steerAngle=0, .vel=0, .height=30, .width=50};
 
     // Main game loop
     while (!rl::WindowShouldClose())    // Detect window close button or ESC key
@@ -54,9 +55,13 @@ int main()
 
                 // Steering
                 if (rl::IsKeyDown(rl::KEY_LEFT)) {
-
+                    player.steerAngle -= 0.1f;
+                    if (player.steerAngle < -2 * M_PI) player.steerAngle += 2 * M_PI;
                 }
-
+                else if (rl::IsKeyDown(rl::KEY_RIGHT)) {
+                    player.steerAngle += 0.1f;
+                    if (player.steerAngle > 2 * M_PI) player.steerAngle -= 2 * M_PI;
+                }
 
                 // Acceleration/Deceleration
                 if (rl::IsKeyDown(rl::KEY_UP)) {
@@ -71,8 +76,8 @@ int main()
                     player.vel -= .1f;
                     if (player.vel < 0) player.vel = 0;
                 }
-                player.posX += player.vel * player.dirX;
-                player.posY += player.vel * player.dirY;
+                player.posX += player.vel * std::cos(player.steerAngle);
+                player.posY += player.vel * std::cos(player.steerAngle - M_PI/2);
 
                 // Endless screen
                 if (player.posX > screenWidth)  player.posX = 0;
@@ -100,7 +105,11 @@ int main()
                 } break;
                 case GAMEPLAY:
                 {
-                    rl::DrawRectangle(player.posX, player.posY, player.width, player.height, rl::PURPLE);
+                    rl::DrawRectanglePro(rl::Rectangle{.x=player.posX, .y=player.posY,
+                                                       .width=player.width, .height=player.height},
+                                         {player.width/2, player.height/2},
+                                         player.steerAngle * 180 / M_PI,
+                                         rl::PURPLE);
                     rl::DrawText("GAMEPLAY SCREEN", 20, 20, 40, rl::MAROON);
 
                 } break;
