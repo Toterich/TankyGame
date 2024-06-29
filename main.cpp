@@ -4,7 +4,17 @@
 
 enum GameScreen {PAUSE, GAMEPLAY};
 
+struct CarSettings {
+    float accel;
+    float decel;
+    float drag;
+    float steeringFw;
+    float steeringBw;
+};
+
 struct Actor {
+    CarSettings car;
+
     float posX;
     float posY;
 
@@ -29,7 +39,21 @@ int main()
 
     rl::SetTargetFPS(60);
 
-    Actor player{.posX=screenWidth/2, .posY=screenHeight/2, .steerAngle=0, .vel=0, .height=30, .width=50};
+    CarSettings car{
+        .accel=0.5f,
+        .decel=0.2f,
+        .drag=0.05f,
+        .steeringFw=0.1f,
+        .steeringBw=0.05f};
+
+    Actor player{
+        .car=car,
+        .posX=screenWidth/2,
+        .posY=screenHeight/2,
+        .steerAngle=0,
+        .vel=0,
+        .height=30,
+        .width=50};
 
     // Main game loop
     while (!rl::WindowShouldClose())    // Detect window close button or ESC key
@@ -55,25 +79,35 @@ int main()
 
                 // Steering
                 if (rl::IsKeyDown(rl::KEY_LEFT)) {
-                    player.steerAngle -= 0.1f;
+                    if (player.vel > 0) {
+                        player.steerAngle -= player.car.steeringFw;
+                    }
+                    else if (player.vel < 0) {
+                        player.steerAngle -= player.car.steeringBw;
+                    }
                     if (player.steerAngle < -2 * M_PI) player.steerAngle += 2 * M_PI;
                 }
                 else if (rl::IsKeyDown(rl::KEY_RIGHT)) {
-                    player.steerAngle += 0.1f;
+                    if (player.vel > 0) {
+                        player.steerAngle += player.car.steeringFw;
+                    }
+                    else if (player.vel < 0) {
+                        player.steerAngle += player.car.steeringBw;
+                    }
                     if (player.steerAngle > 2 * M_PI) player.steerAngle -= 2 * M_PI;
                 }
 
                 // Acceleration/Deceleration
                 if (rl::IsKeyDown(rl::KEY_UP)) {
-                    player.vel += .5f;
+                    player.vel += player.car.accel;
                     if (player.vel > 5) player.vel = 5;
                 }
                 else if (rl::IsKeyDown(rl::KEY_DOWN)) {
-                    player.vel -= .5f;
+                    player.vel -= player.car.decel;
                     if (player.vel < -2) player.vel = -2;
                 }
                 else {
-                    player.vel -= .1f;
+                    player.vel -= player.car.drag;
                     if (player.vel < 0) player.vel = 0;
                 }
                 player.posX += player.vel * std::cos(player.steerAngle);
