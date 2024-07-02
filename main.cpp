@@ -1,6 +1,8 @@
-#include "raylib.hpp"
-
+#define _USE_MATH_DEFINES
 #include <cmath>
+
+// Needs to be last include for VC++
+#include "raylib.hpp"
 
 enum GameScreen {PAUSE, GAMEPLAY};
 

@@ -6,7 +6,12 @@ find_package(raylib 4.0 REQUIRED)
 set(CMAKE_C_STANDARD 11) # Requires C11 standard
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(${PROJECT_NAME} main.cpp)
+add_executable(${PROJECT_NAME}
+    raylib.hpp    
+    main.cpp
+)
+
+target_include_directories(${PROJECT_NAME} PRIVATE ./)
 
 target_link_libraries(${PROJECT_NAME} raylib)
 
