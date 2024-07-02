@@ -1,5 +1,8 @@
 #define _USE_MATH_DEFINES
-#include <cmath>
+#include <math.h>
+
+#include <random>
+
 
 // Needs to be last include for VC++
 #include "raylib.hpp"
@@ -27,6 +30,18 @@ struct Actor {
     float height;
     float width;
 };
+
+struct Coin {
+    bool collected = false;
+
+    float posX;
+    float posY;
+
+    float radius = 10;
+};
+constexpr int MAXCOINS = 1000;
+
+Coin coins[MAXCOINS];
 
 int main()
 {
@@ -56,6 +71,13 @@ int main()
         .vel=0,
         .height=30,
         .width=50};
+    
+    // Place some coins
+    int coinCount = 10;
+    for (int i = 0; i < coinCount; i++) {
+        coins[i].posX = std::rand() % (screenWidth - 10) + 10;
+        coins[i].posY = std::rand() % (screenHeight - 10) + 10;
+    }
 
     // Main game loop
     while (!rl::WindowShouldClose())    // Detect window close button or ESC key
@@ -121,6 +143,13 @@ int main()
                 if (player.posY > screenHeight) player.posY = 0;
                 if (player.posY < 0)            player.posY = screenHeight;
 
+                // Collect coins
+                for (int i = 0; i < coinCount; i++) {
+                    if (rl::CheckCollisionCircleRec(rl::Vector2{coins[i].posX, coins[i].posY}, coins[i].radius, rl::Rectangle{player.posX, player.posY, player.width, player.height})) {
+                        coins[i].collected = true;
+                    }
+                }
+
             } break;
             default: break;
         }
@@ -141,11 +170,19 @@ int main()
                 } break;
                 case GAMEPLAY:
                 {
+                    // Player
                     rl::DrawRectanglePro(rl::Rectangle{.x=player.posX, .y=player.posY,
                                                        .width=player.width, .height=player.height},
                                          {player.width/2, player.height/2},
                                          player.steerAngle * 180 / M_PI,
                                          rl::PURPLE);
+                    // Coins
+                    for (int i = 0; i < coinCount; i++) {
+                        if (!coins[i].collected) {
+                            rl::DrawCircle(coins[i].posX, coins[i].posY, coins[i].radius, rl::GOLD);
+                        }
+                    }
+
                     rl::DrawText("GAMEPLAY SCREEN", 20, 20, 40, rl::MAROON);
 
                 } break;
