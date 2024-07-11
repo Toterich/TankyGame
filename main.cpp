@@ -2,10 +2,17 @@
 #include <math.h>
 
 #include <random>
-
+#include <limits>
 
 // Needs to be last include for VC++
 #include "raylib.hpp"
+
+rl::Vector2 rotateVector(rl::Vector2 v, float angle) {
+    rl::Vector2 res(v);
+    res.x = v.x * std::cos(angle) - v.y * std::sin(angle);
+    res.y = v.x * std::sin(angle) + v.y * std::cos(angle);
+    return res;
+}
 
 enum GameScreen {PAUSE, GAMEPLAY};
 
@@ -20,22 +27,17 @@ struct CarSettings {
 struct Actor {
     CarSettings car;
 
-    float posX;
-    float posY;
+//    BoundingRect bBox;
+    rl::Rectangle bBox;
 
     float steerAngle;
-
     float vel;
-
-    float height;
-    float width;
 };
 
 struct Coin {
     bool collected = false;
 
-    float posX;
-    float posY;
+    rl::Vector2 center;
 
     float radius = 10;
 };
@@ -63,20 +65,23 @@ int main()
         .steeringFw=0.1f,
         .steeringBw=0.05f};
 
+    rl::Rectangle playerBBox;
+    playerBBox.width = 50;
+    playerBBox.height = 30;
+    playerBBox.x = screenWidth/2;
+    playerBBox.y = screenHeight/2;
+
     Actor player{
         .car=car,
-        .posX=screenWidth/2,
-        .posY=screenHeight/2,
+        .bBox=playerBBox,
         .steerAngle=0,
-        .vel=0,
-        .height=30,
-        .width=50};
-    
+        .vel=0};
+
     // Place some coins
     int coinCount = 10;
     for (int i = 0; i < coinCount; i++) {
-        coins[i].posX = std::rand() % (screenWidth - 10) + 10;
-        coins[i].posY = std::rand() % (screenHeight - 10) + 10;
+        coins[i].center.x = std::rand() % (screenWidth - 10) + 10;
+        coins[i].center.y = std::rand() % (screenHeight - 10) + 10;
     }
 
     // Main game loop
@@ -134,18 +139,31 @@ int main()
                     player.vel -= player.car.drag;
                     if (player.vel < 0) player.vel = 0;
                 }
-                player.posX += player.vel * std::cos(player.steerAngle);
-                player.posY += player.vel * std::cos(player.steerAngle - M_PI/2);
+
+                // Move Player
+                player.bBox.x += player.vel * std::cos(player.steerAngle);
+                player.bBox.y += player.vel * std::cos(player.steerAngle - M_PI/2);
 
                 // Endless screen
-                if (player.posX > screenWidth)  player.posX = 0;
-                if (player.posX < 0)            player.posX = screenWidth;
-                if (player.posY > screenHeight) player.posY = 0;
-                if (player.posY < 0)            player.posY = screenHeight;
+                if (player.bBox.x > screenWidth)  player.bBox.x = 0;
+                if (player.bBox.x < 0)            player.bBox.x = screenWidth;
+                if (player.bBox.y > screenHeight) player.bBox.y = 0;
+                if (player.bBox.y < 0)            player.bBox.y = screenHeight;
 
-                // Collect coins
+                rl::Vector2 playerCenter{.x=player.bBox.x + player.bBox.width/2, .y=player.bBox.y + player.bBox.height/2};
+
+                // Collision Check for coins
                 for (int i = 0; i < coinCount; i++) {
-                    if (rl::CheckCollisionCircleRec(rl::Vector2{coins[i].posX, coins[i].posY}, coins[i].radius, rl::Rectangle{player.posX, player.posY, player.width, player.height})) {
+                    if (coins[i].collected) {
+                        continue;
+                    }
+
+                    // Transform Coin into Player coordinate system for collision check
+                    rl::Vector2 transformed_p = coins[i].center;
+                    transformed_p -= playerCenter;
+                    transformed_p = rotateVector(transformed_p, -player.steerAngle);
+                    transformed_p += playerCenter;
+                    if (rl::CheckCollisionCircleRec(transformed_p, coins[i].radius, player.bBox)) {
                         coins[i].collected = true;
                     }
                 }
@@ -171,15 +189,22 @@ int main()
                 case GAMEPLAY:
                 {
                     // Player
-                    rl::DrawRectanglePro(rl::Rectangle{.x=player.posX, .y=player.posY,
-                                                       .width=player.width, .height=player.height},
-                                         {player.width/2, player.height/2},
+                    /*
+                    rl::DrawRectangle(player.bBox.x, player.bBox.y,
+                                      player.bBox.width, player.bBox.height,
+                                      rl::GREEN);
+                    */
+                    rl::Rectangle drawPlayerBox = player.bBox;
+                    drawPlayerBox.x += player.bBox.width/2;
+                    drawPlayerBox.y += player.bBox.height/2;
+                    rl::DrawRectanglePro(drawPlayerBox,
+                                         {player.bBox.width/2, player.bBox.height/2},
                                          player.steerAngle * 180 / M_PI,
                                          rl::PURPLE);
                     // Coins
                     for (int i = 0; i < coinCount; i++) {
                         if (!coins[i].collected) {
-                            rl::DrawCircle(coins[i].posX, coins[i].posY, coins[i].radius, rl::GOLD);
+                            rl::DrawCircle(coins[i].center.x, coins[i].center.y, coins[i].radius, rl::GOLD);
                         }
                     }
 
