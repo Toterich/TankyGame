@@ -1,11 +1,14 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
+#include <cassert>
 #include <random>
 #include <limits>
 
 // Needs to be last include for VC++
 #include "raylib.hpp"
+
+#define ARRAYSIZE(x) sizeof(x)/sizeof(*(x))
 
 rl::Vector2 rotateVector(rl::Vector2 v, float angle) {
     rl::Vector2 res(v);
@@ -14,7 +17,7 @@ rl::Vector2 rotateVector(rl::Vector2 v, float angle) {
     return res;
 }
 
-enum GameScreen {PAUSE, GAMEPLAY};
+enum GameScreen {MAINMENU, PAUSE, GAMEPLAY, FINISH};
 
 struct CarSettings {
     float accel;
@@ -41,48 +44,65 @@ struct Coin {
 
     float radius = 10;
 };
-constexpr int MAXCOINS = 1000;
 
+int screenWidth = 800;
+int screenHeight = 450;
+
+CarSettings car{
+    .accel=0.5f,
+    .decel=0.2f,
+    .drag=0.05f,
+    .steeringFw=0.1f,
+    .steeringBw=0.05f};
+Actor player;
+float trackTime = 0;
+
+constexpr int MAXCOINS = 5;
 Coin coins[MAXCOINS];
+
+void initCoins(Coin* coins, size_t size, size_t numCoins) {
+    for (int i = 0; i < numCoins; i++) {
+        coins[i].center.x = std::rand() % (screenWidth - 10) + 10;
+        coins[i].center.y = std::rand() % (screenHeight - 10) + 10;
+        coins[i].collected = false;
+    }
+}
+
+void resetTrack() {
+    initCoins(coins, MAXCOINS, 20);
+
+    player = {
+        .car=car,
+        .bBox = {
+            .x = (float)screenWidth/2,
+            .y = (float)screenHeight/2,
+            .width = 50,
+            .height = 30,
+        },
+        .steerAngle = 0,
+        .vel = 0
+    };
+
+    trackTime = 0;
+}
+
+void timeToString(char* str, size_t len, float time) {
+    assert(len >= 10);
+
+    int minutes = time / 60;
+    int seconds = (int)time % 60;
+    int millis = (time - (int)time) * 1000;
+    snprintf(str, len, "%02d:%02d.%03d", minutes, seconds, millis);
+}
 
 int main()
 {
     // Initialization
     //--------------------------------------------------------------------------------------
-    const int screenWidth = 800;
-    const int screenHeight = 450;
-
     rl::InitWindow(screenWidth, screenHeight, "Tanky");
-
-    GameScreen currentScreen = GAMEPLAY;
-
     rl::SetTargetFPS(60);
 
-    CarSettings car{
-        .accel=0.5f,
-        .decel=0.2f,
-        .drag=0.05f,
-        .steeringFw=0.1f,
-        .steeringBw=0.05f};
-
-    rl::Rectangle playerBBox;
-    playerBBox.width = 50;
-    playerBBox.height = 30;
-    playerBBox.x = screenWidth/2;
-    playerBBox.y = screenHeight/2;
-
-    Actor player{
-        .car=car,
-        .bBox=playerBBox,
-        .steerAngle=0,
-        .vel=0};
-
-    // Place some coins
-    int coinCount = 10;
-    for (int i = 0; i < coinCount; i++) {
-        coins[i].center.x = std::rand() % (screenWidth - 10) + 10;
-        coins[i].center.y = std::rand() % (screenHeight - 10) + 10;
-    }
+    GameScreen currentScreen = MAINMENU;
 
     // Main game loop
     while (!rl::WindowShouldClose())    // Detect window close button or ESC key
@@ -91,6 +111,16 @@ int main()
         //----------------------------------------------------------------------------------
         switch(currentScreen)
         {
+            case MAINMENU:
+            {
+                if (rl::IsKeyPressed(rl::KEY_ENTER))
+                {
+                    currentScreen = GAMEPLAY;
+                    resetTrack();
+                }
+            }
+            break;
+
             case PAUSE:
             {
                 if (rl::IsKeyPressed(rl::KEY_ENTER))
@@ -98,6 +128,16 @@ int main()
                     currentScreen = GAMEPLAY;
                 }
             } break;
+
+            case FINISH:
+            {
+                if (rl::IsKeyPressed(rl::KEY_R))
+                {
+                    currentScreen = GAMEPLAY;
+                    resetTrack();
+                }
+            } break;
+
             case GAMEPLAY:
             {
                 if (rl::IsKeyPressed(rl::KEY_P))
@@ -105,6 +145,12 @@ int main()
                     currentScreen = PAUSE;
                     break;
                 }
+
+                if (rl::IsKeyPressed(rl::KEY_R)) {
+                    resetTrack();
+                }
+
+                trackTime += rl::GetFrameTime();
 
                 // Steering
                 if (rl::IsKeyDown(rl::KEY_LEFT)) {
@@ -153,10 +199,12 @@ int main()
                 rl::Vector2 playerCenter{.x=player.bBox.x + player.bBox.width/2, .y=player.bBox.y + player.bBox.height/2};
 
                 // Collision Check for coins
-                for (int i = 0; i < coinCount; i++) {
+                bool allCoinsCollected = true;
+                for (int i = 0; i < MAXCOINS; i++) {
                     if (coins[i].collected) {
                         continue;
                     }
+                    allCoinsCollected = false;
 
                     // Transform Coin into Player coordinate system for collision check
                     rl::Vector2 transformed_p = coins[i].center;
@@ -166,6 +214,10 @@ int main()
                     if (rl::CheckCollisionCircleRec(transformed_p, coins[i].radius, player.bBox)) {
                         coins[i].collected = true;
                     }
+                }
+
+                if (allCoinsCollected) {
+                    currentScreen = FINISH;
                 }
 
             } break;
@@ -179,6 +231,13 @@ int main()
 
             switch(currentScreen)
             {
+                case MAINMENU:
+                {
+                    rl::DrawRectangle(0, 0, screenWidth, screenHeight, rl::GREEN);
+                    rl::DrawText("START SCREEN", 20, 20, 40, rl::DARKGREEN);
+                    rl::DrawText("PRESS ENTER to JUMP to GAMEPLAY SCREEN", 120, 220, 20, rl::DARKGREEN);
+
+                } break;
                 case PAUSE:
                 {
                     rl::DrawRectangle(0, 0, screenWidth, screenHeight, rl::GREEN);
@@ -202,13 +261,28 @@ int main()
                                          player.steerAngle * 180 / M_PI,
                                          rl::PURPLE);
                     // Coins
-                    for (int i = 0; i < coinCount; i++) {
+                    for (int i = 0; i < MAXCOINS; i++) {
                         if (!coins[i].collected) {
                             rl::DrawCircle(coins[i].center.x, coins[i].center.y, coins[i].radius, rl::GOLD);
                         }
                     }
 
+                    char timer[10];
+                    timeToString(timer, sizeof(timer), trackTime);
+                    rl::DrawText(timer, screenWidth - 100, 20, 20, rl::BLACK);
+
                     rl::DrawText("GAMEPLAY SCREEN", 20, 20, 40, rl::MAROON);
+
+                } break;
+                case FINISH:
+                {
+                    char finishText[sizeof("Final Time: xx:xx.xxx")];
+                    char timer[10];
+                    timeToString(timer, sizeof(timer), trackTime);
+                    snprintf(finishText, sizeof(finishText), "Final Time: %s", timer);
+                    int finishFontSize = 40;
+                    int textWidth = rl::MeasureText(finishText, finishFontSize);
+                    rl::DrawText(finishText, screenWidth/2 - textWidth/2, screenHeight/2 - 40, finishFontSize, rl::BLUE);
 
                 } break;
                 default: break;
