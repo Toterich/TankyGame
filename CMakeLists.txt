@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(Tanky)
 
-find_package(raylib 4.0 REQUIRED)
+find_package(raylib CONFIG REQUIRED)
 
 set(CMAKE_C_STANDARD 11) # Requires C11 standard
 set(CMAKE_CXX_STANDARD 20)

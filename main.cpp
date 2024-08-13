@@ -60,7 +60,7 @@ float trackTime = 0;
 constexpr int MAXCOINS = 5;
 Coin coins[MAXCOINS];
 
-void initCoins(Coin* coins, size_t size, size_t numCoins) {
+void initCoins(Coin* coins, size_t numCoins) {
     for (int i = 0; i < numCoins; i++) {
         coins[i].center.x = std::rand() % (screenWidth - 10) + 10;
         coins[i].center.y = std::rand() % (screenHeight - 10) + 10;
@@ -69,7 +69,7 @@ void initCoins(Coin* coins, size_t size, size_t numCoins) {
 }
 
 void resetTrack() {
-    initCoins(coins, MAXCOINS, 20);
+    initCoins(coins, MAXCOINS);
 
     player = {
         .car=car,
