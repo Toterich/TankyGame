@@ -8,6 +8,8 @@
 // Needs to be last include for VC++
 #include "raylib.hpp"
 
+#include "types.hpp"
+
 #define ARRAYSIZE(x) sizeof(x)/sizeof(*(x))
 
 rl::Vector2 rotateVector(rl::Vector2 v, float angle) {
@@ -19,32 +21,6 @@ rl::Vector2 rotateVector(rl::Vector2 v, float angle) {
 
 enum GameScreen {MAINMENU, PAUSE, GAMEPLAY, FINISH};
 
-struct CarSettings {
-    float accel;
-    float decel;
-    float drag;
-    float steeringFw;
-    float steeringBw;
-};
-
-struct Actor {
-    CarSettings car;
-
-//    BoundingRect bBox;
-    rl::Rectangle bBox;
-
-    float steerAngle;
-    float vel;
-};
-
-struct Coin {
-    bool collected = false;
-
-    rl::Vector2 center;
-
-    float radius = 10;
-};
-
 int screenWidth = 800;
 int screenHeight = 450;
 
@@ -54,11 +30,8 @@ CarSettings car{
     .drag=0.05f,
     .steeringFw=0.1f,
     .steeringBw=0.05f};
-Actor player;
-float trackTime = 0;
 
-constexpr int MAXCOINS = 5;
-Coin coins[MAXCOINS];
+SimContext simCtx;
 
 void initCoins(Coin* coins, size_t numCoins) {
     for (int i = 0; i < numCoins; i++) {
@@ -69,9 +42,9 @@ void initCoins(Coin* coins, size_t numCoins) {
 }
 
 void resetTrack() {
-    initCoins(coins, MAXCOINS);
+    initCoins(simCtx.coins, MAXCOINS);
 
-    player = {
+    simCtx.player = {
         .car=car,
         .bBox = {
             .x = (float)screenWidth/2,
@@ -83,7 +56,7 @@ void resetTrack() {
         .vel = 0
     };
 
-    trackTime = 0;
+    simCtx.trackTime = 0;
 }
 
 void timeToString(char* str, size_t len, float time) {
@@ -93,6 +66,76 @@ void timeToString(char* str, size_t len, float time) {
     int seconds = (int)time % 60;
     int millis = (time - (int)time) * 1000;
     snprintf(str, len, "%02d:%02d.%03d", minutes, seconds, millis);
+}
+
+bool AdvanceSimulation(SimContext& sim, ControlState const &ctrl, float frameTime) {
+    sim.trackTime += rl::GetFrameTime();
+
+    // Steering
+    if (ctrl.left) {
+        if (sim.player.vel > 0) {
+            sim.player.steerAngle -= sim.player.car.steeringFw;
+        }
+        else if (sim.player.vel < 0) {
+            sim.player.steerAngle -= sim.player.car.steeringBw;
+        }
+        if (sim.player.steerAngle < -2 * M_PI) sim.player.steerAngle += 2 * M_PI;
+    }
+    else if (ctrl.right) {
+        if (sim.player.vel > 0) {
+            sim.player.steerAngle += sim.player.car.steeringFw;
+        }
+        else if (sim.player.vel < 0) {
+            sim.player.steerAngle += sim.player.car.steeringBw;
+        }
+        if (sim.player.steerAngle > 2 * M_PI) sim.player.steerAngle -= 2 * M_PI;
+    }
+
+    // Acceleration/Deceleration
+    if (ctrl.fw) {
+        sim.player.vel += sim.player.car.accel;
+        if (sim.player.vel > 5) sim.player.vel = 5;
+    }
+    else if (ctrl.bw) {
+        sim.player.vel -= sim.player.car.decel;
+        if (sim.player.vel < -2) sim.player.vel = -2;
+    }
+    else {
+        sim.player.vel -= sim.player.car.drag;
+        if (sim.player.vel < 0) sim.player.vel = 0;
+    }
+
+    // Move Player
+    sim.player.bBox.x += sim.player.vel * std::cos(sim.player.steerAngle);
+    sim.player.bBox.y += sim.player.vel * std::cos(sim.player.steerAngle - M_PI/2);
+
+    // Endless screen
+    if (sim.player.bBox.x > screenWidth)  sim.player.bBox.x = 0;
+    if (sim.player.bBox.x < 0)            sim.player.bBox.x = screenWidth;
+    if (sim.player.bBox.y > screenHeight) sim.player.bBox.y = 0;
+    if (sim.player.bBox.y < 0)            sim.player.bBox.y = screenHeight;
+
+    rl::Vector2 playerCenter{.x=sim.player.bBox.x + sim.player.bBox.width/2, .y=sim.player.bBox.y + sim.player.bBox.height/2};
+
+    // Collision Check for coins
+    bool allCoinsCollected = true;
+    for (int i = 0; i < MAXCOINS; i++) {
+        if (sim.coins[i].collected) {
+            continue;
+        }
+        allCoinsCollected = false;
+
+        // Transform Coin into Player coordinate system for collision check
+        rl::Vector2 transformed_p = sim.coins[i].center;
+        transformed_p -= playerCenter;
+        transformed_p = rotateVector(transformed_p, -sim.player.steerAngle);
+        transformed_p += playerCenter;
+        if (rl::CheckCollisionCircleRec(transformed_p, sim.coins[i].radius, sim.player.bBox)) {
+            sim.coins[i].collected = true;
+        }
+    }
+
+    return allCoinsCollected;
 }
 
 int main()
@@ -150,75 +193,16 @@ int main()
                     resetTrack();
                 }
 
-                trackTime += rl::GetFrameTime();
+                ControlState ctrl = {};
+                ctrl.left = rl::IsKeyDown(rl::KEY_LEFT);
+                ctrl.right = rl::IsKeyDown(rl::KEY_RIGHT);
+                ctrl.fw = rl::IsKeyDown(rl::KEY_UP);
+                ctrl.bw = rl::IsKeyDown(rl::KEY_DOWN);
 
-                // Steering
-                if (rl::IsKeyDown(rl::KEY_LEFT)) {
-                    if (player.vel > 0) {
-                        player.steerAngle -= player.car.steeringFw;
-                    }
-                    else if (player.vel < 0) {
-                        player.steerAngle -= player.car.steeringBw;
-                    }
-                    if (player.steerAngle < -2 * M_PI) player.steerAngle += 2 * M_PI;
-                }
-                else if (rl::IsKeyDown(rl::KEY_RIGHT)) {
-                    if (player.vel > 0) {
-                        player.steerAngle += player.car.steeringFw;
-                    }
-                    else if (player.vel < 0) {
-                        player.steerAngle += player.car.steeringBw;
-                    }
-                    if (player.steerAngle > 2 * M_PI) player.steerAngle -= 2 * M_PI;
-                }
-
-                // Acceleration/Deceleration
-                if (rl::IsKeyDown(rl::KEY_UP)) {
-                    player.vel += player.car.accel;
-                    if (player.vel > 5) player.vel = 5;
-                }
-                else if (rl::IsKeyDown(rl::KEY_DOWN)) {
-                    player.vel -= player.car.decel;
-                    if (player.vel < -2) player.vel = -2;
-                }
-                else {
-                    player.vel -= player.car.drag;
-                    if (player.vel < 0) player.vel = 0;
-                }
-
-                // Move Player
-                player.bBox.x += player.vel * std::cos(player.steerAngle);
-                player.bBox.y += player.vel * std::cos(player.steerAngle - M_PI/2);
-
-                // Endless screen
-                if (player.bBox.x > screenWidth)  player.bBox.x = 0;
-                if (player.bBox.x < 0)            player.bBox.x = screenWidth;
-                if (player.bBox.y > screenHeight) player.bBox.y = 0;
-                if (player.bBox.y < 0)            player.bBox.y = screenHeight;
-
-                rl::Vector2 playerCenter{.x=player.bBox.x + player.bBox.width/2, .y=player.bBox.y + player.bBox.height/2};
-
-                // Collision Check for coins
-                bool allCoinsCollected = true;
-                for (int i = 0; i < MAXCOINS; i++) {
-                    if (coins[i].collected) {
-                        continue;
-                    }
-                    allCoinsCollected = false;
-
-                    // Transform Coin into Player coordinate system for collision check
-                    rl::Vector2 transformed_p = coins[i].center;
-                    transformed_p -= playerCenter;
-                    transformed_p = rotateVector(transformed_p, -player.steerAngle);
-                    transformed_p += playerCenter;
-                    if (rl::CheckCollisionCircleRec(transformed_p, coins[i].radius, player.bBox)) {
-                        coins[i].collected = true;
-                    }
-                }
-
-                if (allCoinsCollected) {
+                if (AdvanceSimulation(simCtx, ctrl, rl::GetFrameTime())) {
                     currentScreen = FINISH;
                 }
+
 
             } break;
             default: break;
@@ -253,22 +237,22 @@ int main()
                                       player.bBox.width, player.bBox.height,
                                       rl::GREEN);
                     */
-                    rl::Rectangle drawPlayerBox = player.bBox;
-                    drawPlayerBox.x += player.bBox.width/2;
-                    drawPlayerBox.y += player.bBox.height/2;
+                    rl::Rectangle drawPlayerBox = simCtx.player.bBox;
+                    drawPlayerBox.x += simCtx.player.bBox.width/2;
+                    drawPlayerBox.y += simCtx.player.bBox.height/2;
                     rl::DrawRectanglePro(drawPlayerBox,
-                                         {player.bBox.width/2, player.bBox.height/2},
-                                         player.steerAngle * 180 / M_PI,
+                                         {simCtx.player.bBox.width/2, simCtx.player.bBox.height/2},
+                                         simCtx.player.steerAngle * 180 / M_PI,
                                          rl::PURPLE);
                     // Coins
                     for (int i = 0; i < MAXCOINS; i++) {
-                        if (!coins[i].collected) {
-                            rl::DrawCircle(coins[i].center.x, coins[i].center.y, coins[i].radius, rl::GOLD);
+                        if (!simCtx.coins[i].collected) {
+                            rl::DrawCircle(simCtx.coins[i].center.x, simCtx.coins[i].center.y, simCtx.coins[i].radius, rl::GOLD);
                         }
                     }
 
                     char timer[10];
-                    timeToString(timer, sizeof(timer), trackTime);
+                    timeToString(timer, sizeof(timer), simCtx.trackTime);
                     rl::DrawText(timer, screenWidth - 100, 20, 20, rl::BLACK);
 
                     rl::DrawText("GAMEPLAY SCREEN", 20, 20, 40, rl::MAROON);
@@ -278,7 +262,7 @@ int main()
                 {
                     char finishText[sizeof("Final Time: xx:xx.xxx")];
                     char timer[10];
-                    timeToString(timer, sizeof(timer), trackTime);
+                    timeToString(timer, sizeof(timer), simCtx.trackTime);
                     snprintf(finishText, sizeof(finishText), "Final Time: %s", timer);
                     int finishFontSize = 40;
                     int textWidth = rl::MeasureText(finishText, finishFontSize);
